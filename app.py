@@ -9,9 +9,6 @@ import time
 import pytesseract
 from PIL import Image
 
-# AGREGAR ESTA LÍNEA AQUÍ (Asegurate de que la ruta coincida con donde se instaló)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Traductor de documentos", page_icon="🌍", layout="wide")
 
