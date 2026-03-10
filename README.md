@@ -1,4 +1,4 @@
-# 🌍 B2B Document Translator: Traducción Inteligente & OCR
+# B2B Document Translator: Traducción Inteligente & OCR
 
 ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
@@ -8,7 +8,7 @@
 
 ---
 
-## 🚀 Características Principales
+## Características Principales
 
 * **Traducción Estructural:** Convierte archivos PDF a DOCX de forma interna para traducir párrafos y tablas manteniendo el formato original.
 * **Motor OCR para Imágenes:** Extrae y traduce texto de archivos visuales (`.png`, `.jpg`, `.jpeg`) línea por línea.
@@ -18,7 +18,7 @@
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 * **Frontend:** [Streamlit](https://streamlit.io/)
 * **Conversión PDF/Word:** [pdf2docx](https://dothinking.github.io/pdf2docx/) & [python-docx](https://python-docx.readthedocs.io/)
@@ -28,7 +28,7 @@
 
 ---
 
-## 📦 Instalación y Configuración
+## Instalación y Configuración
 
 1.  **Cloná el repositorio:**
     ```bash
@@ -53,7 +53,7 @@
 
 ---
 
-## 💡 Flujo de Trabajo
+## Flujo de Trabajo
 
 1.  **Carga:** Subí un archivo PDF, DOCX o una imagen técnica.
 2.  **Configuración:** Seleccioná el idioma de destino (puedes dejar el origen en "Auto-detectar").
