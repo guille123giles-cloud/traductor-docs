@@ -9,7 +9,6 @@ import time
 import pytesseract
 from PIL import Image
 
-# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Traductor de documentos", page_icon="🌍", layout="wide")
 
 def traducir_bloque(texto, origen, destino):
@@ -48,7 +47,6 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
 
         doc = docx.Document(ruta_docx)
         
-        # Extraemos párrafos y tablas
         textos_a_traducir = []
         for parrafo in doc.paragraphs:
             if parrafo.text.strip(): textos_a_traducir.append(parrafo)
@@ -66,7 +64,6 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
 
         estado.info(f"🚀 Paso 2/3: Traduciendo {total} fragmentos de texto...")
         
-        # Procesamiento en paralelo
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             futuros = [executor.submit(traducir_bloque, p.text, origen, destino) for p in textos_a_traducir]
             for i, futuro in enumerate(futuros):
@@ -86,7 +83,6 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
         estado.error(f"❌ Ocurrió un error al procesar el documento: {e}")
         return None
     finally:
-        # Limpieza de archivos temporales
         archivos_a_borrar = set()
         if 'ruta_original' in locals(): archivos_a_borrar.add(ruta_original)
         if 'ruta_docx' in locals() and ruta_docx != ruta_original: archivos_a_borrar.add(ruta_docx)
@@ -99,7 +95,6 @@ def procesar_imagen(imagen_subida, origen, destino, barra, estado):
     estado.info("⚙️ Paso 1/2: Leyendo el texto de la imagen...")
     img = Image.open(imagen_subida)
     
-    # Extraemos el texto usando Tesseract OCR
     texto_extraido = pytesseract.image_to_string(img)
     
     if not texto_extraido.strip():
@@ -116,7 +111,6 @@ def procesar_imagen(imagen_subida, origen, destino, barra, estado):
     lineas_traducidas = []
     procesadas = 0
     
-    # Traducimos manteniendo la estructura de saltos de línea original (ideal para menús)
     for linea in lineas:
         if linea.strip():
             lineas_traducidas.append(traducir_bloque(linea, origen, destino))
@@ -130,7 +124,6 @@ def procesar_imagen(imagen_subida, origen, destino, barra, estado):
     return texto_extraido, texto_final
 
 
-# --- INTERFAZ PARA EL CLIENTE ---
 st.title("🌍 Traductor de Documentos e Imágenes")
 st.divider()
 
@@ -152,12 +145,10 @@ with col2:
 
 st.divider()
 
-# --- PROCESAMIENTO ---
 _, col_btn, _ = st.columns([1, 2, 1])
 
 with col_btn:
     if archivo:
-        # Aviso si el archivo es muy pesado
         if archivo.size > 5 * 1024 * 1024:
             st.warning("⚠️ El archivo supera los 5MB. El proceso puede demorar más de lo habitual.")
             
@@ -168,7 +159,6 @@ with col_btn:
             extension = os.path.splitext(archivo.name)[1].lower()
             nombre_base = os.path.splitext(archivo.name)[0]
             
-            # --- RUTA 1: DOCUMENTOS (PDF / DOCX) ---
             if extension in [".pdf", ".docx"]:
                 resultado = procesar_documento(archivo, idioma_ori, idioma_des, barra, estado)
                 
@@ -181,7 +171,6 @@ with col_btn:
                         use_container_width=True
                     )
             
-            # --- RUTA 2: IMÁGENES (PNG / JPG / JPEG) ---
             elif extension in [".png", ".jpg", ".jpeg"]:
                 texto_original, texto_traducido = procesar_imagen(archivo, idioma_ori, idioma_des, barra, estado)
                 
@@ -194,3 +183,4 @@ with col_btn:
                         st.text_area(f"Traducción al {des_nombre}", value=texto_traducido, height=350)
                 else:
                     estado.error(texto_traducido)
+
