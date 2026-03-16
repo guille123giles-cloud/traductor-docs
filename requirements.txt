@@ -1,6 +1,6 @@
 streamlit
-python-docx
-pdf2docx
-deep-translator
-pytesseract
 Pillow
+deep-translator
+azure-ai-translation-document
+azure-storage-blob
+google-genai
