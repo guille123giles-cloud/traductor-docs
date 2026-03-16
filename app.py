@@ -1,18 +1,24 @@
 import streamlit as st
-import docx
-from pdf2docx import Converter
-from deep_translator import GoogleTranslator
 import tempfile
 import os
-import concurrent.futures
 import time
-import pytesseract
 from PIL import Image
+from deep_translator import GoogleTranslator
+import datetime
 
+# --- NUEVA LIBRERÍA DE GOOGLE ---
+from google import genai
+
+# Librerías de Azure
+from azure.core.credentials import AzureKeyCredential
+from azure.ai.translation.document import DocumentTranslationClient, DocumentTranslationInput, TranslationTarget
+from azure.storage.blob import BlobServiceClient, generate_container_sas, ContainerSasPermissions
+
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Traductor de documentos", page_icon="🌍", layout="wide")
 
 def traducir_bloque(texto, origen, destino):
-    """Traduce un bloque de texto con reintentos automáticos en caso de fallas de conexión."""
+    """Traduce un bloque de texto entero. Súper rápido y con reintentos."""
     if not texto.strip() or len(texto.strip()) < 2: 
         return texto
     for intento in range(3):
@@ -23,107 +29,124 @@ def traducir_bloque(texto, origen, destino):
     return texto 
 
 def procesar_documento(archivo_subido, origen, destino, barra, estado):
-    """Procesa y traduce archivos PDF y DOCX manteniendo la estructura básica."""
-    extension = os.path.splitext(archivo_subido.name)[1].lower()
-    
-    with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp_file:
-        tmp_file.write(archivo_subido.getvalue())
-        ruta_original = tmp_file.name
-        
-    ruta_docx_out = ruta_original.replace(extension, "_traducido.docx")
-
+    """Procesa y traduce archivos PDF y DOCX en la nube conservando 100% el layout original."""
     try:
-        if extension == ".pdf":
-            estado.info("⚙️ Paso 1/3: Convirtiendo PDF a Word y extrayendo estructura...")
-            ruta_docx = ruta_original.replace(".pdf", ".docx")
-            cv = Converter(ruta_original)
-            cv.convert(ruta_docx, start=0, end=None)
-            cv.close()
-        elif extension == ".docx":
-            estado.info("⚙️ Paso 1/3: Analizando la estructura del documento Word...")
-            ruta_docx = ruta_original 
-        else:
-            return None
-
-        doc = docx.Document(ruta_docx)
+        endpoint = st.secrets["TRANSLATOR_ENDPOINT"]
+        key = st.secrets["TRANSLATOR_KEY"]
+        conn_str = st.secrets["STORAGE_CONNECTION_STRING"]
         
-        textos_a_traducir = []
-        for parrafo in doc.paragraphs:
-            if parrafo.text.strip(): textos_a_traducir.append(parrafo)
+        nombre_archivo = archivo_subido.name
+        
+        estado.info("⚙️ Paso 1/4: Conectando con Azure y subiendo documento seguro...")
+        barra.progress(25)
+        
+        # Conectar al Storage y subir a 'origen'
+        blob_service_client = BlobServiceClient.from_connection_string(conn_str)
+        account_name = blob_service_client.account_name
+        account_key = blob_service_client.credential.account_key
+        
+        blob_client_origen = blob_service_client.get_blob_client(container="origen", blob=nombre_archivo)
+        blob_client_origen.upload_blob(archivo_subido.getvalue(), overwrite=True)
+        
+        estado.info("🔐 Paso 2/4: Generando permisos temporales de lectura y escritura...")
+        barra.progress(50)
+        
+        ahora = datetime.datetime.now(datetime.timezone.utc)
+        inicio = ahora - datetime.timedelta(minutes=15)
+        fin = ahora + datetime.timedelta(hours=1)
+        
+        sas_origen = generate_container_sas(
+            account_name=account_name,
+            container_name="origen",
+            account_key=account_key,
+            permission=ContainerSasPermissions(read=True, list=True),
+            start=inicio,
+            expiry=fin
+        )
+        url_origen = f"https://{account_name}.blob.core.windows.net/origen?{sas_origen}"
+        
+        sas_destino = generate_container_sas(
+            account_name=account_name,
+            container_name="destino",
+            account_key=account_key,
+            permission=ContainerSasPermissions(read=True, write=True, list=True),
+            start=inicio,
+            expiry=fin
+        )
+        url_destino = f"https://{account_name}.blob.core.windows.net/destino?{sas_destino}"
+        
+        estado.info("🚀 Paso 3/4: Azure está renderizando y traduciendo tu documento (puede demorar)...")
+        barra.progress(75)
+        
+        # Enviar a Azure Document Translation
+        client = DocumentTranslationClient(endpoint, AzureKeyCredential(key))
+        inputs = [
+            DocumentTranslationInput(
+                source_url=url_origen,
+                targets=[TranslationTarget(target_url=url_destino, language=destino)]
+            )
+        ]
+        
+        poller = client.begin_translation(inputs)
+        poller.result() # Espera a que termine el proceso asíncrono
+        
+        estado.info("💾 Paso 4/4: Descargando el documento final maquetado...")
+        barra.progress(90)
+        
+        # Descargar el archivo traducido
+        blob_client_destino = blob_service_client.get_blob_client(container="destino", blob=nombre_archivo)
+        datos_traducidos = blob_client_destino.download_blob().readall()
+        
+        # Limpieza en la nube (Privacidad)
+        blob_client_origen.delete_blob()
+        try:
+            blob_client_destino.delete_blob()
+        except:
+            pass 
             
-        for tabla in doc.tables:
-            for fila in tabla.rows:
-                for celda in fila.cells:
-                    for parrafo in celda.paragraphs:
-                        if parrafo.text.strip(): textos_a_traducir.append(parrafo)
-
-        total = len(textos_a_traducir)
-        if total == 0:
-            estado.warning("⚠️ No se encontró texto legible en el documento.")
-            return None
-
-        estado.info(f"🚀 Paso 2/3: Traduciendo {total} fragmentos de texto...")
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-            futuros = [executor.submit(traducir_bloque, p.text, origen, destino) for p in textos_a_traducir]
-            for i, futuro in enumerate(futuros):
-                textos_a_traducir[i].text = futuro.result()
-                barra.progress((i + 1) / total)
-
-        estado.info("💾 Paso 3/3: Ensamblando el documento final traducido...")
-        doc.save(ruta_docx_out)
-        
-        with open(ruta_docx_out, "rb") as f:
-            datos = f.read()
-            
-        estado.success("✅ ¡Traducción de documento completada!")
-        return datos
+        estado.success("✅ ¡Traducción profesional completada con éxito!")
+        barra.progress(100)
+        return datos_traducidos
 
     except Exception as e:
-        estado.error(f"❌ Ocurrió un error al procesar el documento: {e}")
+        estado.error(f"❌ Ocurrió un error con la API de Azure: {e}")
         return None
-    finally:
-        archivos_a_borrar = set()
-        if 'ruta_original' in locals(): archivos_a_borrar.add(ruta_original)
-        if 'ruta_docx' in locals() and ruta_docx != ruta_original: archivos_a_borrar.add(ruta_docx)
-        if 'ruta_docx_out' in locals(): archivos_a_borrar.add(ruta_docx_out)
-        for f in archivos_a_borrar:
-            if os.path.exists(f): os.remove(f)
 
 def procesar_imagen(imagen_subida, origen, destino, barra, estado):
-    """Extrae texto de una imagen con OCR y lo traduce línea por línea."""
-    estado.info("⚙️ Paso 1/2: Leyendo el texto de la imagen...")
+    """Extrae texto de una imagen usando Google Gemini y lo traduce en bloque."""
+    estado.info("⚙️ Paso 1/2: Leyendo la imagen con Inteligencia Artificial...")
     img = Image.open(imagen_subida)
     
-    texto_extraido = pytesseract.image_to_string(img)
-    
-    if not texto_extraido.strip():
-        return None, "⚠️ No se detectó texto legible en la imagen."
+    try:
+        # Usar el nuevo cliente de Google GenAI
+        client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+        prompt_ocr = "Extrae todo el texto de esta imagen con precisión absoluta. Respeta los saltos de línea y el orden de los mensajes. No agregues introducciones, ni comentarios, solo devuelve el texto exacto que ves."
         
-    lineas = texto_extraido.split('\n')
-    lineas_validas = [l for l in lineas if l.strip()]
-    total = len(lineas_validas)
+        respuesta = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[prompt_ocr, img]
+        )
+        
+        texto_extraido = respuesta.text
+        
+    except Exception as e:
+        return None, f"⚠️ Error al leer la imagen con Gemini: {e}"
     
-    if total == 0:
-        return None, "⚠️ No se detectó texto legible en la imagen."
+    if not texto_extraido or not texto_extraido.strip():
+        return None, "⚠️ No se detectó texto legible en la captura."
 
-    estado.info(f"🚀 Paso 2/2: Traduciendo {total} líneas de texto...")
-    lineas_traducidas = []
-    procesadas = 0
+    estado.info("🚀 Paso 2/2: Traduciendo texto de forma optimizada...")
+    barra.progress(50)
     
-    for linea in lineas:
-        if linea.strip():
-            lineas_traducidas.append(traducir_bloque(linea, origen, destino))
-            procesadas += 1
-            barra.progress(procesadas / total)
-        else:
-            lineas_traducidas.append("") 
+    # TRADUCCIÓN EN UN SOLO VIAJE (Muchísimo más rápido)
+    texto_final = traducir_bloque(texto_extraido, origen, destino)
             
-    texto_final = "\n".join(lineas_traducidas)
-    estado.success("✅ ¡Lectura y traducción de imagen completada!")
+    barra.progress(100)
+    estado.success("✅ ¡Lectura y traducción de imagen completada al instante!")
     return texto_extraido, texto_final
 
 
+# --- INTERFAZ PARA EL CLIENTE ---
 st.title("🌍 Traductor de Documentos e Imágenes")
 st.divider()
 
@@ -145,6 +168,7 @@ with col2:
 
 st.divider()
 
+# --- PROCESAMIENTO ---
 _, col_btn, _ = st.columns([1, 2, 1])
 
 with col_btn:
@@ -159,18 +183,22 @@ with col_btn:
             extension = os.path.splitext(archivo.name)[1].lower()
             nombre_base = os.path.splitext(archivo.name)[0]
             
+            # --- RUTA 1: DOCUMENTOS (PDF / DOCX) ---
             if extension in [".pdf", ".docx"]:
                 resultado = procesar_documento(archivo, idioma_ori, idioma_des, barra, estado)
                 
                 if resultado:
+                    tipo_mime = "application/pdf" if extension == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    
                     st.download_button(
-                        label="⬇️ DESCARGAR DOCUMENTO TRADUCIDO (.DOCX)", 
+                        label=f"⬇️ DESCARGAR DOCUMENTO TRADUCIDO ({extension.upper()})", 
                         data=resultado, 
-                        file_name=f"TRADUCIDO_{nombre_base}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        file_name=f"TRADUCIDO_{nombre_base}{extension}",
+                        mime=tipo_mime,
                         use_container_width=True
                     )
             
+            # --- RUTA 2: IMÁGENES (PNG / JPG / JPEG) ---
             elif extension in [".png", ".jpg", ".jpeg"]:
                 texto_original, texto_traducido = procesar_imagen(archivo, idioma_ori, idioma_des, barra, estado)
                 
@@ -182,5 +210,5 @@ with col_btn:
                     with col_res2:
                         st.text_area(f"Traducción al {des_nombre}", value=texto_traducido, height=350)
                 else:
-                    estado.error(texto_traducido)
-
+                    if texto_traducido:
+                        estado.error(texto_traducido)
