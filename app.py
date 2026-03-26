@@ -6,15 +6,12 @@ from PIL import Image
 from deep_translator import GoogleTranslator
 import datetime
 
-# --- NUEVA LIBRERÍA DE GOOGLE ---
 from google import genai
 
-# Librerías de Azure
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.translation.document import DocumentTranslationClient, DocumentTranslationInput, TranslationTarget
 from azure.storage.blob import BlobServiceClient, generate_container_sas, ContainerSasPermissions
 
-# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Traductor de documentos", page_icon="🌍", layout="wide")
 
 def traducir_bloque(texto, origen, destino):
@@ -37,10 +34,9 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
         
         nombre_archivo = archivo_subido.name
         
-        estado.info("⚙️ Paso 1/4: Conectando con Azure y subiendo documento seguro...")
+        estado.info(" Paso 1/4: Conectando con Azure y subiendo documento seguro...")
         barra.progress(25)
         
-        # Conectar al Storage y subir a 'origen'
         blob_service_client = BlobServiceClient.from_connection_string(conn_str)
         account_name = blob_service_client.account_name
         account_key = blob_service_client.credential.account_key
@@ -48,7 +44,7 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
         blob_client_origen = blob_service_client.get_blob_client(container="origen", blob=nombre_archivo)
         blob_client_origen.upload_blob(archivo_subido.getvalue(), overwrite=True)
         
-        estado.info("🔐 Paso 2/4: Generando permisos temporales de lectura y escritura...")
+        estado.info(" Paso 2/4: Generando permisos temporales de lectura y escritura...")
         barra.progress(50)
         
         ahora = datetime.datetime.now(datetime.timezone.utc)
@@ -75,10 +71,9 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
         )
         url_destino = f"https://{account_name}.blob.core.windows.net/destino?{sas_destino}"
         
-        estado.info("🚀 Paso 3/4: Azure está renderizando y traduciendo tu documento (puede demorar)...")
+        estado.info(" Paso 3/4: Azure está renderizando y traduciendo tu documento (puede demorar)...")
         barra.progress(75)
         
-        # Enviar a Azure Document Translation
         client = DocumentTranslationClient(endpoint, AzureKeyCredential(key))
         inputs = [
             DocumentTranslationInput(
@@ -88,9 +83,9 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
         ]
         
         poller = client.begin_translation(inputs)
-        poller.result() # Espera a que termine el proceso asíncrono
+        poller.result()
         
-        estado.info("💾 Paso 4/4: Descargando el documento final maquetado...")
+        estado.info(" Paso 4/4: Descargando el documento final maquetado...")
         barra.progress(90)
         
         # Descargar el archivo traducido
@@ -104,21 +99,20 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
         except:
             pass 
             
-        estado.success("✅ ¡Traducción profesional completada con éxito!")
+        estado.success(" ¡Traducción profesional completada con éxito!")
         barra.progress(100)
         return datos_traducidos
 
     except Exception as e:
-        estado.error(f"❌ Ocurrió un error con la API de Azure: {e}")
+        estado.error(f" Ocurrió un error con la API de Azure: {e}")
         return None
 
 def procesar_imagen(imagen_subida, origen, destino, barra, estado):
     """Extrae texto de una imagen usando Google Gemini y lo traduce en bloque."""
-    estado.info("⚙️ Paso 1/2: Leyendo la imagen con Inteligencia Artificial...")
+    estado.info(" Paso 1/2: Leyendo la imagen con Inteligencia Artificial...")
     img = Image.open(imagen_subida)
     
     try:
-        # Usar el nuevo cliente de Google GenAI
         client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
         prompt_ocr = "Extrae todo el texto de esta imagen con precisión absoluta. Respeta los saltos de línea y el orden de los mensajes. No agregues introducciones, ni comentarios, solo devuelve el texto exacto que ves."
         
@@ -130,24 +124,22 @@ def procesar_imagen(imagen_subida, origen, destino, barra, estado):
         texto_extraido = respuesta.text
         
     except Exception as e:
-        return None, f"⚠️ Error al leer la imagen con Gemini: {e}"
+        return None, f" Error al leer la imagen con Gemini: {e}"
     
     if not texto_extraido or not texto_extraido.strip():
-        return None, "⚠️ No se detectó texto legible en la captura."
+        return None, " No se detectó texto legible en la captura."
 
-    estado.info("🚀 Paso 2/2: Traduciendo texto de forma optimizada...")
+    estado.info(" Paso 2/2: Traduciendo texto de forma optimizada...")
     barra.progress(50)
     
-    # TRADUCCIÓN EN UN SOLO VIAJE (Muchísimo más rápido)
     texto_final = traducir_bloque(texto_extraido, origen, destino)
             
     barra.progress(100)
-    estado.success("✅ ¡Lectura y traducción de imagen completada al instante!")
+    estado.success(" ¡Lectura y traducción de imagen completada al instante!")
     return texto_extraido, texto_final
 
 
-# --- INTERFAZ PARA EL CLIENTE ---
-st.title("🌍 Traductor de Documentos e Imágenes")
+st.title("Traductor de Documentos e Imágenes")
 st.divider()
 
 col1, col2 = st.columns([1, 1], gap="large")
@@ -168,22 +160,20 @@ with col2:
 
 st.divider()
 
-# --- PROCESAMIENTO ---
 _, col_btn, _ = st.columns([1, 2, 1])
 
 with col_btn:
     if archivo:
         if archivo.size > 5 * 1024 * 1024:
-            st.warning("⚠️ El archivo supera los 5MB. El proceso puede demorar más de lo habitual.")
+            st.warning(" El archivo supera los 5MB. El proceso puede demorar más de lo habitual.")
             
-        if st.button("🚀 COMENZAR TRADUCCIÓN", use_container_width=True):
+        if st.button(" COMENZAR TRADUCCIÓN", use_container_width=True):
             estado = st.empty()
             barra = st.progress(0)
             
             extension = os.path.splitext(archivo.name)[1].lower()
             nombre_base = os.path.splitext(archivo.name)[0]
             
-            # --- RUTA 1: DOCUMENTOS (PDF / DOCX) ---
             if extension in [".pdf", ".docx"]:
                 resultado = procesar_documento(archivo, idioma_ori, idioma_des, barra, estado)
                 
@@ -191,19 +181,18 @@ with col_btn:
                     tipo_mime = "application/pdf" if extension == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     
                     st.download_button(
-                        label=f"⬇️ DESCARGAR DOCUMENTO TRADUCIDO ({extension.upper()})", 
+                        label=f" DESCARGAR DOCUMENTO TRADUCIDO ({extension.upper()})", 
                         data=resultado, 
                         file_name=f"TRADUCIDO_{nombre_base}{extension}",
                         mime=tipo_mime,
                         use_container_width=True
                     )
             
-            # --- RUTA 2: IMÁGENES (PNG / JPG / JPEG) ---
             elif extension in [".png", ".jpg", ".jpeg"]:
                 texto_original, texto_traducido = procesar_imagen(archivo, idioma_ori, idioma_des, barra, estado)
                 
                 if texto_original:
-                    st.markdown("### 📝 Resultados")
+                    st.markdown("###  Resultados")
                     col_res1, col_res2 = st.columns(2)
                     with col_res1:
                         st.text_area("Texto Original", value=texto_original, height=350)
