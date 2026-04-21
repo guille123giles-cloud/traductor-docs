@@ -107,6 +107,7 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
                         if not words:
                             paginas.append("")
                             continue
+                        page_width = pagina.width
                         # Agrupar words por línea (misma posición Y, tolerancia 3px)
                         lineas_raw = []
                         linea_actual = [words[0]]
@@ -117,27 +118,29 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
                                 lineas_raw.append(linea_actual)
                                 linea_actual = [w]
                         lineas_raw.append(linea_actual)
-                        # Convertir a texto limpio, reemplazando (cid:127) por bullet
-                        textos = []
+                        # Convertir a texto limpio con x1 para detectar cortes
+                        lineas_info = []
                         for ln in lineas_raw:
                             partes = [('•' if w['text'] == '(cid:127)' else w['text']) for w in ln]
-                            textos.append(' '.join(partes))
-                        # Unir líneas de continuación (cortadas por el layout del PDF)
+                            texto = ' '.join(partes)
+                            x1_pct = ln[-1]['x1'] / page_width * 100
+                            lineas_info.append((texto, x1_pct))
+                        # Unir líneas cortadas por el margen derecho del PDF
                         lineas_finales = []
                         i = 0
-                        while i < len(textos):
-                            linea = textos[i]
-                            while i + 1 < len(textos):
-                                siguiente = textos[i + 1]
-                                termina_oracion = linea.rstrip().endswith(('.', ':', '–', '|'))
-                                es_bullet = siguiente.startswith('•')
-                                es_seccion = siguiente.isupper() and len(siguiente) > 3
-                                empieza_minuscula = bool(siguiente) and siguiente[0].islower()
-                                if not termina_oracion and not es_bullet and not es_seccion and empieza_minuscula:
-                                    linea = linea.rstrip() + ' ' + siguiente.lstrip()
-                                    i += 1
-                                else:
+                        while i < len(lineas_info):
+                            linea, x1_pct = lineas_info[i]
+                            # Si esta línea llega al margen (>82%), la siguiente es continuación
+                            while x1_pct > 82 and i + 1 < len(lineas_info):
+                                siguiente, siguiente_x1 = lineas_info[i + 1]
+                                # Nunca unir si la siguiente es una sección o bullet nuevo
+                                es_nueva_seccion = siguiente.isupper() and len(siguiente.split()) <= 5
+                                es_bullet_nuevo = siguiente.startswith('•')
+                                if es_nueva_seccion or es_bullet_nuevo:
                                     break
+                                linea = linea.rstrip() + ' ' + siguiente.lstrip()
+                                x1_pct = siguiente_x1
+                                i += 1
                             lineas_finales.append(linea)
                             i += 1
                         paginas.append('\n'.join(lineas_finales))
