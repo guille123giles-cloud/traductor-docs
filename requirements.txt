@@ -1,6 +1,7 @@
 streamlit
 Pillow
 deep-translator
-azure-ai-translation-document
-azure-storage-blob
+python-docx
+pdfplumber
+fpdf2
 google-genai
