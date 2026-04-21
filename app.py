@@ -109,19 +109,40 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
             estado.info("💾 Paso 3/3: Generando el nuevo PDF traducido...")
             barra.progress(90)
 
+            def _limpiar_linea(texto):
+                if not texto:
+                    return ""
+                return texto.encode("latin-1", errors="replace").decode("latin-1")
+
+            def _escribir_linea(pdf, linea):
+                linea = _limpiar_linea(linea)
+                if not linea.strip():
+                    pdf.ln(4)
+                    return
+                palabras = linea.split(" ")
+                partes = []
+                for palabra in palabras:
+                    while len(palabra) > 55:
+                        partes.append(palabra[:55])
+                        palabra = palabra[55:]
+                    partes.append(palabra)
+                linea_segura = " ".join(partes)
+                try:
+                    pdf.multi_cell(0, 6, linea_segura)
+                except Exception:
+                    pass
+
             pdf_out = FPDF()
-            pdf_out.set_auto_page_break(auto=True, margin=15)
+            pdf_out.set_margins(20, 20, 20)
+            pdf_out.set_auto_page_break(auto=True, margin=20)
             pdf_out.add_page()
-            pdf_out.set_font("Helvetica", size=11)
+            pdf_out.set_font("Helvetica", size=10)
 
             for i, texto_pag in enumerate(paginas_traducidas):
                 if i > 0:
                     pdf_out.add_page()
                 for linea in texto_pag.split("\n"):
-                    try:
-                        pdf_out.multi_cell(0, 7, linea)
-                    except Exception:
-                        pdf_out.multi_cell(0, 7, linea.encode("latin-1", "replace").decode("latin-1"))
+                    _escribir_linea(pdf_out, linea)
 
             buffer = io.BytesIO()
             pdf_out.output(buffer)
