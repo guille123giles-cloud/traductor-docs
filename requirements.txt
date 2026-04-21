@@ -3,5 +3,5 @@ Pillow
 deep-translator
 python-docx
 pdfplumber
-fpdf2
+reportlab
 google-genai
