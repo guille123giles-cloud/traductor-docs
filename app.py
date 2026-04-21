@@ -13,7 +13,7 @@ from google import genai
 import io
 import docx
 import pdfplumber
-from fpdf import FPDF
+# reportlab se importa dentro de procesar_documento para PDFs
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Traductor de documentos", page_icon="🌍", layout="wide")
@@ -90,6 +90,11 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
 
         # ── PDF ─────────────────────────────────────────────────────────────────
         elif extension == ".pdf":
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+            from reportlab.lib.styles import ParagraphStyle
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.units import cm
+
             estado.info("⚙️ Paso 1/3: Extrayendo texto del PDF...")
             barra.progress(10)
 
@@ -109,43 +114,32 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
             estado.info("💾 Paso 3/3: Generando el nuevo PDF traducido...")
             barra.progress(90)
 
-            def _limpiar_linea(texto):
-                if not texto:
-                    return ""
-                return texto.encode("latin-1", errors="replace").decode("latin-1")
-
-            def _escribir_linea(pdf, linea):
-                linea = _limpiar_linea(linea)
-                if not linea.strip():
-                    pdf.ln(4)
-                    return
-                palabras = linea.split(" ")
-                partes = []
-                for palabra in palabras:
-                    while len(palabra) > 55:
-                        partes.append(palabra[:55])
-                        palabra = palabra[55:]
-                    partes.append(palabra)
-                linea_segura = " ".join(partes)
-                try:
-                    pdf.multi_cell(0, 6, linea_segura)
-                except Exception:
-                    pass
-
-            pdf_out = FPDF()
-            pdf_out.set_margins(20, 20, 20)
-            pdf_out.set_auto_page_break(auto=True, margin=20)
-            pdf_out.add_page()
-            pdf_out.set_font("Helvetica", size=10)
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                buffer, pagesize=A4,
+                leftMargin=2*cm, rightMargin=2*cm,
+                topMargin=2*cm, bottomMargin=2*cm
+            )
+            estilo = ParagraphStyle(
+                "cuerpo", fontName="Helvetica", fontSize=10, leading=14, spaceAfter=2
+            )
+            story = []
 
             for i, texto_pag in enumerate(paginas_traducidas):
                 if i > 0:
-                    pdf_out.add_page()
+                    story.append(PageBreak())
                 for linea in texto_pag.split("\n"):
-                    _escribir_linea(pdf_out, linea)
+                    linea = linea.strip()
+                    if not linea:
+                        story.append(Spacer(1, 6))
+                    else:
+                        linea_safe = linea.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        try:
+                            story.append(Paragraph(linea_safe, estilo))
+                        except Exception:
+                            pass
 
-            buffer = io.BytesIO()
-            pdf_out.output(buffer)
+            doc.build(story)
             buffer.seek(0)
 
             estado.success("✅ ¡Traducción del PDF completada!")
