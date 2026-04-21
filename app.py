@@ -98,11 +98,52 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
             estado.info("⚙️ Paso 1/3: Extrayendo texto del PDF...")
             barra.progress(10)
 
-            paginas_texto = []
-            with pdfplumber.open(io.BytesIO(archivo_subido.getvalue())) as pdf:
-                for pagina in pdf.pages:
-                    texto = pagina.extract_text() or ""
-                    paginas_texto.append(texto)
+            def _extraer_paginas_limpias(pdf_bytes):
+                """Extrae texto agrupando words por línea real y reconstruyendo oraciones cortadas."""
+                paginas = []
+                with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                    for pagina in pdf.pages:
+                        words = pagina.extract_words(keep_blank_chars=False)
+                        if not words:
+                            paginas.append("")
+                            continue
+                        # Agrupar words por línea (misma posición Y, tolerancia 3px)
+                        lineas_raw = []
+                        linea_actual = [words[0]]
+                        for w in words[1:]:
+                            if abs(w['top'] - linea_actual[0]['top']) < 3:
+                                linea_actual.append(w)
+                            else:
+                                lineas_raw.append(linea_actual)
+                                linea_actual = [w]
+                        lineas_raw.append(linea_actual)
+                        # Convertir a texto limpio, reemplazando (cid:127) por bullet
+                        textos = []
+                        for ln in lineas_raw:
+                            partes = [('•' if w['text'] == '(cid:127)' else w['text']) for w in ln]
+                            textos.append(' '.join(partes))
+                        # Unir líneas de continuación (cortadas por el layout del PDF)
+                        lineas_finales = []
+                        i = 0
+                        while i < len(textos):
+                            linea = textos[i]
+                            while i + 1 < len(textos):
+                                siguiente = textos[i + 1]
+                                termina_oracion = linea.rstrip().endswith(('.', ':', '–', '|'))
+                                es_bullet = siguiente.startswith('•')
+                                es_seccion = siguiente.isupper() and len(siguiente) > 3
+                                empieza_minuscula = bool(siguiente) and siguiente[0].islower()
+                                if not termina_oracion and not es_bullet and not es_seccion and empieza_minuscula:
+                                    linea = linea.rstrip() + ' ' + siguiente.lstrip()
+                                    i += 1
+                                else:
+                                    break
+                            lineas_finales.append(linea)
+                            i += 1
+                        paginas.append('\n'.join(lineas_finales))
+                return paginas
+
+            paginas_texto = _extraer_paginas_limpias(archivo_subido.getvalue())
 
             if not any(p.strip() for p in paginas_texto):
                 estado.error("❌ El PDF parece ser una imagen escaneada sin texto extraíble. Convertilo a DOCX o usá la opción de imagen.")
@@ -120,9 +161,8 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
                 leftMargin=2*cm, rightMargin=2*cm,
                 topMargin=2*cm, bottomMargin=2*cm
             )
-            estilo = ParagraphStyle(
-                "cuerpo", fontName="Helvetica", fontSize=10, leading=14, spaceAfter=2
-            )
+            estilo_normal = ParagraphStyle("cuerpo", fontName="Helvetica", fontSize=10, leading=14, spaceAfter=2)
+            estilo_bullet = ParagraphStyle("bullet", fontName="Helvetica", fontSize=10, leading=14, spaceAfter=2, leftIndent=12, firstLineIndent=-12)
             story = []
 
             for i, texto_pag in enumerate(paginas_traducidas):
@@ -131,9 +171,11 @@ def procesar_documento(archivo_subido, origen, destino, barra, estado):
                 for linea in texto_pag.split("\n"):
                     linea = linea.strip()
                     if not linea:
-                        story.append(Spacer(1, 6))
+                        story.append(Spacer(1, 5))
                     else:
+                        es_bullet = linea.startswith('•')
                         linea_safe = linea.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        estilo = estilo_bullet if es_bullet else estilo_normal
                         try:
                             story.append(Paragraph(linea_safe, estilo))
                         except Exception:
