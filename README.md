@@ -1,14 +1,14 @@
-# 🌍 Traductor de Documentos e Imágenes
+# Traductor de Documentos e Imágenes
 
 Aplicación web serverless construida con **Streamlit** que traduce documentos PDF, archivos Word e imágenes usando APIs gratuitas — sin servicios cloud de pago.
 
 Originalmente construida con Azure Document Translation. Migrada completamente a un **stack 100% gratuito** usando Google Translate (via `deep-translator`), Google Gemini (para OCR), `pdfplumber`, `reportlab` y `python-docx`.
 
-🔗 **Demo en vivo:** _https://traductor-docs-4gjrvwwnrazsdbj5y4fu37.streamlit.app/._
+**Demo en vivo:** _https://traductor-docs-4gjrvwwnrazsdbj5y4fu37.streamlit.app/._
 
 ---
 
-## ✨ Funcionalidades
+## Funcionalidades
 
 - **Traducción de PDF** — Extrae texto de forma inteligente (reconstruye líneas cortadas por el layout del PDF), traduce y genera un nuevo PDF limpio descargable
 - **Traducción de DOCX** — Lee documentos Word preservando los estilos de párrafo, traduce todo el texto y las tablas, devuelve un `.docx` listo para descargar
@@ -19,7 +19,7 @@ Originalmente construida con Azure Document Translation. Migrada completamente a
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 | Capa | Tecnología |
 |---|---|
@@ -34,10 +34,10 @@ Originalmente construida con Azure Document Translation. Migrada completamente a
 
 ---
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
-📦 traductor-documentos
+traductor-documentos
 ├── app.py                  # App principal de Streamlit
 ├── requirements.txt        # Dependencias de Python
 ├── .streamlit/
@@ -49,7 +49,7 @@ Originalmente construida con Azure Document Translation. Migrada completamente a
 
 ---
 
-## 🚀 Correr en Local
+## Correr en Local
 
 ### 1. Clonar el repositorio
 ```bash
@@ -79,7 +79,7 @@ streamlit run app.py
 
 ---
 
-## ☁️ Deploy en Streamlit Cloud
+## Deploy en Streamlit Cloud
 
 1. Subí este repositorio a GitHub
 2. Entrá a [share.streamlit.io](https://share.streamlit.io) y conectá tu repo
@@ -88,7 +88,7 @@ streamlit run app.py
 
 ---
 
-## ⚙️ Cómo Funciona
+## Cómo Funciona
 
 ### Traducción de PDF
 1. `pdfplumber` extrae las palabras agrupadas por su posición Y real (líneas reales del documento)
@@ -109,6 +109,6 @@ streamlit run app.py
 
 ---
 
-## 📄 Licencia
+## Licencia
 
 MIT License — libre para usar, modificar y distribuir.
